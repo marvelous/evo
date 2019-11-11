@@ -1,7 +1,6 @@
 mod config;
 mod entity;
 mod map;
-mod map_data;
 mod position;
 mod world;
 mod world_renderer;
@@ -10,6 +9,8 @@ use tetra::{Context, ContextBuilder, State};
 use tetra::input::{self, Key, MouseButton};
 use tetra::graphics::{self, Color, Font, ScreenScaling, Text, Texture, Vec2};
 use tetra::window::{self};
+
+use noise::{NoiseFn, Seedable, Value};
 
 use config::*;
 use entity::*;
@@ -38,13 +39,19 @@ impl GameState {
 
         let font = Font::new(ctx, "./assets/font/04b03.ttf")?;
 
-        let map_data = load_tiled_map("./assets/map/test.json").unwrap();
-        let mut world = World::new(map_data.get_width(), map_data.get_height());
+        let noise = Value::new().set_seed(rand::random());
+        let noise_scale = 1./8.;
+        let noise_min = -1.;
+        let noise_max = 1.;
 
-        for iy in 0..map_data.get_height() {
-            for ix in 0..map_data.get_width() {
+        let mut world = World::new(MAP_WIDTH, MAP_HEIGHT);
+
+        for iy in 0..MAP_HEIGHT {
+            for ix in 0..MAP_WIDTH {
                 let position = Position::new(ix as i16, iy as i16);
-                world.map.get_mut(position).unwrap().height = map_data.get_tile(ix, iy);
+                let noise_value = noise.get([ix as f64 * noise_scale, iy as f64 * noise_scale]);
+                let height = (noise_value - noise_min) / (noise_max - noise_min) * 16 as f64;
+                world.map.get_mut(position).unwrap().height = height as u8;
             }
         }
 
@@ -265,26 +272,6 @@ impl State for GameState {
         
         Ok(())
     }
-}
-
-pub fn load_tiled_map<P: AsRef<std::path::Path>>(map_path: P) -> tetra::Result<map_data::MapData> {
-    let content = std::fs::read_to_string(map_path)?;
-    let parsed = json::parse(content.as_str()).unwrap();
-
-    let width = parsed["width"].as_usize().unwrap();
-    let height = parsed["height"].as_usize().unwrap();
-    let raw_data = &parsed["layers"][0]["data"];
-
-    let mut data = map_data::MapData::new(width, height);
-
-    for ix in 0..width {
-        for iy in 0..height {
-            let tid = raw_data[iy * width + ix].as_u8().unwrap() - 1;
-            data.set_tile(ix, iy, tid);
-        }
-    }
-
-    Ok(data)
 }
 
 fn main() -> tetra::Result {
